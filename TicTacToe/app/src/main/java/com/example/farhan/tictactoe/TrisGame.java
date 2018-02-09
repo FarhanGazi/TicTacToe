@@ -2,6 +2,7 @@ package com.example.farhan.tictactoe;
 
 import java.util.ArrayList;
 import java.util.Observable;
+import java.util.Random;
 
 public class TrisGame extends Observable {
 
@@ -12,6 +13,8 @@ public class TrisGame extends Observable {
     private final String gameOverMessage = "Press RESET to play again.";
     private final String invalidMoveMessage = "This cell is already occupied.";
     private final String drawGame = "Match ended in a draw.";
+    private final String turnIndication = "The first move expect to: X.";
+    private final int possibleCombs = 8;
 
     private cellElement[][] mg;
     private cellElement turn;
@@ -20,6 +23,8 @@ public class TrisGame extends Observable {
 
     private int scP1, scP2;
     private ArrayList<int[]> winningPth;
+
+    private ArrayList<OpponentStatus> statuses;
 
     public TrisGame() {
         setGamePoint();
@@ -37,6 +42,10 @@ public class TrisGame extends Observable {
         gameOver = false;
         won = false;
         winningPth = new ArrayList<>();
+        statuses = new ArrayList<>();
+        setChanged();
+        if (turn == cellElement.X)
+            notifyObservers(new Message(Message.invalidMove, turnIndication));
     }
 
     private void setGamePoint() {
@@ -66,7 +75,8 @@ public class TrisGame extends Observable {
         boolean ris = mg[row][column] == cellElement.E;
         if (!ris) {
             setChanged();
-            notifyObservers(new Message(Message.invalidMove, invalidMoveMessage));
+            if (turn == cellElement.X)
+                notifyObservers(new Message(Message.invalidMove, invalidMoveMessage));
         } else {
             setChanged();
             notifyObservers(new Message(Message.validMove, getActualPlayer(), new int[]{row, column}));
@@ -86,6 +96,7 @@ public class TrisGame extends Observable {
     }
 
     private void hasWon() {
+        statuses.clear();
         verticalControl();
         orizontalControl();
         firtDiagonalControl();
@@ -93,15 +104,36 @@ public class TrisGame extends Observable {
         if (isWon()) {
             gameOver = true;
             setMatchScore();
+            isGameOver();
             setChanged();
             notifyObservers(new Message(Message.gameWon, getActualPlayer(), getMatchScore(), getWinningPth()));
         } else if (isMgFull()) {
             gameOver = true;
+            isGameOver();
             setChanged();
             notifyObservers(new Message(Message.gameDraw, drawGame));
         } else {
             changeTurn();
+            if (turn == cellElement.O) {
+                int px, py;
+                do {
+                    int[] pos = getMachineMove();
+                    px = pos[0];
+                    py = pos[1];
+                } while (!validateMove(px, py));
+                setMove(px, py);
+            }
         }
+    }
+
+    private int[] getMachineMove() {
+        int temp = 0;
+        for (int i = 0; i < statuses.size(); i++) {
+            if (statuses.get(i).getSeedNumber() > temp && statuses.get(i).emptyPos.size() > 0) {
+                temp = i;
+            }
+        }
+        return statuses.get(temp).getEmptyPos();
     }
 
     private void setMatchScore() {
@@ -136,13 +168,21 @@ public class TrisGame extends Observable {
         if (!isWon()) {
             for (int i = 0; !isGameOver() && i < 3; i++) {
                 int cnt = 0;
+                int seeds = 0;
+                ArrayList<int[]> emptyPos = new ArrayList<>();
                 winningPth.clear();
                 for (int j = 0; j < 3; j++) {
                     if (mg[j][i] == turn) {
                         cnt++;
                         winningPth.add(new int[]{j, i});
+                    } else if (mg[j][i] == cellElement.E) {
+                        emptyPos.add(new int[]{j, i});
+                    }
+                    if (mg[j][i] == cellElement.X) {
+                        seeds++;
                     }
                 }
+                statuses.add(new OpponentStatus(seeds, emptyPos));
                 won = gameOver = cnt == 3;
             }
         }
@@ -152,13 +192,21 @@ public class TrisGame extends Observable {
         if (!isWon()) {
             for (int i = 0; !isGameOver() && i < 3; i++) {
                 int cnt = 0;
+                int seeds = 0;
+                ArrayList<int[]> emptyPos = new ArrayList<>();
                 winningPth.clear();
                 for (int j = 0; j < 3; j++) {
                     if (mg[i][j] == turn) {
                         cnt++;
                         winningPth.add(new int[]{i, j});
+                    } else if (mg[i][j] == cellElement.E) {
+                        emptyPos.add(new int[]{i, j});
+                    }
+                    if (mg[i][j] == cellElement.X) {
+                        seeds++;
                     }
                 }
+                statuses.add(new OpponentStatus(seeds, emptyPos));
                 won = gameOver = cnt == 3;
             }
         }
@@ -169,12 +217,20 @@ public class TrisGame extends Observable {
         if (!isWon()) {
             winningPth.clear();
             int cnt = 0;
+            int seeds = 0;
+            ArrayList<int[]> emptyPos = new ArrayList<>();
             for (int i = 0; i < 3; i++) {
                 if (mg[i][i] == turn) {
                     cnt++;
                     winningPth.add(new int[]{i, i});
+                } else if (mg[i][i] == cellElement.E) {
+                    emptyPos.add(new int[]{i, 2 - i});
+                }
+                if (mg[i][i] == cellElement.X) {
+                    seeds++;
                 }
             }
+            statuses.add(new OpponentStatus(seeds, emptyPos));
             won = gameOver = cnt == 3;
         }
     }
@@ -183,13 +239,40 @@ public class TrisGame extends Observable {
         if (!isWon()) {
             winningPth.clear();
             int cnt = 0;
+            int seeds = 0;
+            ArrayList<int[]> emptyPos = new ArrayList<>();
             for (int i = 0; i < 3; i++) {
                 if (mg[i][2 - i] == turn) {
                     cnt++;
                     winningPth.add(new int[]{i, 2 - i});
+                } else if (mg[i][2 - i] == cellElement.E) {
+                    emptyPos.add(new int[]{i, 2 - i});
+                }
+                if (mg[i][2 - i] == cellElement.X) {
+                    seeds++;
                 }
             }
+            statuses.add(new OpponentStatus(seeds, emptyPos));
             won = gameOver = cnt == 3;
         }
+    }
+
+    private class OpponentStatus {
+        private int seeds;
+        private ArrayList<int[]> emptyPos;
+
+        public OpponentStatus(int seeds, ArrayList<int[]> emptyPos) {
+            this.seeds = seeds;
+            this.emptyPos = emptyPos;
+        }
+
+        public int getSeedNumber() {
+            return seeds;
+        }
+
+        public int[] getEmptyPos() {
+            return emptyPos.get(0);
+        }
+
     }
 }
